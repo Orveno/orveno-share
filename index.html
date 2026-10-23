@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orveno</title>
+<meta property="og:title" content="Watch this on Orveno">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #000; color: #fff; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+  header { width: 100%; max-width: 480px; padding: 14px 16px; font-weight: 700; font-size: 20px; letter-spacing: .3px; }
+  header span { background: linear-gradient(90deg, #20d3c8, #fe2c55); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  main { width: 100%; max-width: 480px; padding: 0 16px 32px; }
+  .frame { width: 100%; aspect-ratio: 9 / 16; max-height: 75vh; background: #111; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .frame iframe, .frame img { width: 100%; height: 100%; border: 0; object-fit: contain; background: #000; }
+  .meta { margin-top: 14px; }
+  .user { color: #9a9a9a; font-size: 15px; }
+  .cap { margin-top: 6px; font-size: 16px; line-height: 1.4; word-break: break-word; }
+  .msg { color: #9a9a9a; text-align: center; padding: 60px 20px; font-size: 17px; }
+  .spin { width: 34px; height: 34px; border: 3px solid #333; border-top-color: #20d3c8; border-radius: 50%; animation: s 0.8s linear infinite; }
+  @keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header><span>Orveno</span></header>
+<main id="app"><div class="frame"><div class="spin"></div></div></main>
+
+<script>
+  // Firebase প্রজেক্ট আইডি (google-services.json এর project_id)
+  var PROJECT_ID = "neontiktokclone";
+
+  var app = document.getElementById("app");
+
+  function showMsg(text) {
+    app.innerHTML = "";
+    var d = document.createElement("div");
+    d.className = "msg";
+    d.textContent = text;
+    app.appendChild(d);
+  }
+
+  function str(f) { return f && f.stringValue ? f.stringValue : ""; }
+
+  var id = new URLSearchParams(location.search).get("v");
+  if (!id) {
+    showMsg("Video not found");
+  } else {
+    var url = "https://firestore.googleapis.com/v1/projects/" + PROJECT_ID +
+      "/databases/(default)/documents/videos/" + encodeURIComponent(id);
+    fetch(url).then(function (r) {
+      if (!r.ok) throw new Error("nf");
+      return r.json();
+    }).then(function (doc) {
+      var f = doc.fields || {};
+      if ((str(f.privacy) || "everyone") !== "everyone") { showMsg("This video is private"); return; }
+
+      var fileId = "";
+      try { fileId = str(f.storage.mapValue.fields.fileId); } catch (e) {}
+      if (!fileId) {
+        var m = /files\/([A-Za-z0-9_-]+)/.exec(str(f.videoUrl));
+        if (m) fileId = m[1];
+      }
+      if (!fileId) { showMsg("Video not found"); return; }
+
+      var isVideo = !(f.isVideo && f.isVideo.booleanValue === false);
+      var frame = document.createElement("div");
+      frame.className = "frame";
+      if (isVideo) {
+        var ifr = document.createElement("iframe");
+        ifr.src = "https://drive.google.com/file/d/" + fileId + "/preview";
+        ifr.allow = "autoplay; fullscreen";
+        ifr.setAttribute("allowfullscreen", "");
+        frame.appendChild(ifr);
+      } else {
+        var img = document.createElement("img");
+        img.src = "https://drive.google.com/thumbnail?id=" + fileId + "&sz=w1600";
+        frame.appendChild(img);
+      }
+
+      var meta = document.createElement("div");
+      meta.className = "meta";
+      var handle = str(f.username).replace(/^@/, "");
+      if (handle) {
+        var u = document.createElement("div");
+        u.className = "user";
+        u.textContent = "@" + handle;
+        meta.appendChild(u);
+      }
+      var cap = str(f.caption) || str(f.title);
+      if (cap && cap !== "Untitled") {
+        var c = document.createElement("div");
+        c.className = "cap";
+        c.textContent = cap;
+        meta.appendChild(c);
+      }
+
+      app.innerHTML = "";
+      app.appendChild(frame);
+      app.appendChild(meta);
+      document.title = (cap ? cap + " · " : "") + "Orveno";
+    }).catch(function () {
+      showMsg("Video not found");
+    });
+  }
+</script>
+</body>
+</html>
