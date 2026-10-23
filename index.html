@@ -37,6 +37,8 @@
 
   .controls { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 14px 12px;
     background: linear-gradient(to top, rgba(0,0,0,.75), rgba(0,0,0,0)); display: flex; align-items: center; gap: 10px; }
+  .controls { transition: opacity .25s; }
+  .stage.idle .controls { opacity: 0; pointer-events: none; }
   .ibtn { border: 0; background: none; color: #fff; padding: 6px; display: flex; cursor: pointer; }
   .ibtn svg { width: 22px; height: 22px; fill: #fff; }
   .time { font-size: 12px; color: #ddd; min-width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -130,7 +132,13 @@
     video.loop = true;
     video.autoplay = true;
     video.preload = "auto";
-    video.src = "https://drive.google.com/uc?export=download&id=" + fileId;
+    // Try Drive's direct-download endpoints one by one (no API key needed)
+    var sources = [
+      "https://drive.usercontent.google.com/download?id=" + fileId + "&export=download&confirm=t",
+      "https://drive.google.com/uc?export=download&confirm=t&id=" + fileId
+    ];
+    var srcIndex = 0;
+    video.src = sources[0];
     stage.appendChild(video);
 
     var spinner = el("div", "spinner", '<div class="spin"></div>');
@@ -160,6 +168,20 @@
     function toggle() {
       if (video.paused) video.play().catch(function () {}); else video.pause();
     }
+
+    // Controls hide after 2 seconds without touch while playing; a tap on the video brings them back
+    var idleTimer = null;
+    function showControls() {
+      stage.classList.remove("idle");
+      clearTimeout(idleTimer);
+      if (!video.paused) idleTimer = setTimeout(function () { stage.classList.add("idle"); }, 2000);
+    }
+    function onVideoTap() {
+      if (stage.classList.contains("idle")) { showControls(); return; }
+      toggle();
+      showControls();
+    }
+    controls.addEventListener("pointerdown", showControls);
     function sync() {
       var d = video.duration || 0, t = video.currentTime || 0;
       var p = d ? Math.min(100, (t / d) * 100) : 0;
@@ -174,8 +196,10 @@
     video.addEventListener("canplay", function () { spinner.style.display = "none"; });
     video.addEventListener("pause", function () { stage.classList.add("paused"); playBtn.innerHTML = ICON.play; });
 
-    video.addEventListener("click", toggle);
-    playBtn.addEventListener("click", toggle);
+    video.addEventListener("click", onVideoTap);
+    playBtn.addEventListener("click", function () { toggle(); showControls(); });
+    video.addEventListener("play", showControls);
+    video.addEventListener("pause", showControls);
     muteBtn.addEventListener("click", function () {
       video.muted = !video.muted;
       muteBtn.innerHTML = video.muted ? ICON.mute : ICON.vol;
@@ -209,8 +233,20 @@
       ifr.setAttribute("allowfullscreen", "");
       stage.appendChild(ifr);
     }
-    video.addEventListener("error", fallback);
-    setTimeout(function () { if (video.readyState < 2) fallback(); }, 9000);
+    function nextSource() {
+      srcIndex++;
+      if (srcIndex < sources.length) {
+        video.src = sources[srcIndex];
+        video.load();
+        video.play().catch(function () {});
+      } else {
+        fallback();
+      }
+    }
+    video.addEventListener("error", nextSource);
+    var guard = srcIndex;
+    setTimeout(function () { if (video.readyState < 2 && srcIndex === guard) nextSource(); }, 8000);
+    setTimeout(function () { if (video.readyState < 2) fallback(); }, 18000);
   }
 
   var id = new URLSearchParams(location.search).get("v");
@@ -274,4 +310,3 @@
 </script>
 </body>
 </html>
-
